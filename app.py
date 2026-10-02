@@ -39,6 +39,14 @@ st.markdown("""
         color: #ffffff;
     }
 
+    .options-box {
+        background-color: #1a1f2c;
+        border-radius: 6px;
+        padding: 6px;
+        margin-bottom: 8px;
+        border: 1px solid #2e364f;
+    }
+
     .welcome-container {
         display: flex;
         flex-direction: column;
@@ -83,6 +91,8 @@ if "chats" not in st.session_state:
     st.session_state.chats = {}
 if "current_chat_id" not in st.session_state:
     st.session_state.current_chat_id = None
+if "active_options_id" not in st.session_state:
+    st.session_state.active_options_id = None
 if "rename_id" not in st.session_state:
     st.session_state.rename_id = None
 
@@ -123,43 +133,62 @@ def generate_chat_title(user_prompt, model):
     return user_prompt[:25]
 
 def render_chat_item(cid, chat_data):
-    col1, col2, col3, col4 = st.columns([0.5, 0.18, 0.16, 0.16])
+    col1, col2 = st.columns([0.82, 0.18])
     
     with col1:
         if st.button(chat_data["title"], key=f"select_{cid}", use_container_width=True):
             st.session_state.current_chat_id = cid
+            st.session_state.active_options_id = None
             st.rerun()
             
     with col2:
-        pin_label = "إلغاء" if chat_data.get("pinned", False) else "تثبيت"
-        if st.button(pin_label, key=f"pin_{cid}"):
-            chat_data["pinned"] = not chat_data.get("pinned", False)
+        if st.button("...", key=f"dots_{cid}"):
+            if st.session_state.active_options_id == cid:
+                st.session_state.active_options_id = None
+            else:
+                st.session_state.active_options_id = cid
             st.rerun()
+
+    if st.session_state.active_options_id == cid:
+        with st.container():
+            st.markdown('<div class="options-box">', unsafe_allow_html=True)
+            c_opt1, c_opt2, c_opt3 = st.columns([0.33, 0.33, 0.33])
             
-    with col3:
-        if st.button("تعديل", key=f"ren_{cid}"):
-            st.session_state.rename_id = cid if st.session_state.rename_id != cid else None
-            st.rerun()
-            
-    with col4:
-        if st.button("حذف", key=f"del_{cid}"):
-            del st.session_state.chats[cid]
-            if st.session_state.current_chat_id == cid:
-                st.session_state.current_chat_id = None
-            st.rerun()
-            
-    if st.session_state.rename_id == cid:
-        new_title = st.text_input("العنوان الجديد:", value=chat_data["title"], key=f"inp_{cid}")
-        if st.button("حفظ", key=f"save_{cid}"):
-            st.session_state.chats[cid]["title"] = new_title
-            st.session_state.rename_id = None
-            st.rerun()
+            with c_opt1:
+                pin_label = "إلغاء التثبيت" if chat_data.get("pinned", False) else "تثبيت"
+                if st.button(pin_label, key=f"pin_{cid}", use_container_width=True):
+                    chat_data["pinned"] = not chat_data.get("pinned", False)
+                    st.session_state.active_options_id = None
+                    st.rerun()
+                    
+            with c_opt2:
+                if st.button("تعديل", key=f"ren_{cid}", use_container_width=True):
+                    st.session_state.rename_id = cid if st.session_state.rename_id != cid else None
+                    st.rerun()
+                    
+            with c_opt3:
+                if st.button("حذف", key=f"del_{cid}", use_container_width=True):
+                    del st.session_state.chats[cid]
+                    if st.session_state.current_chat_id == cid:
+                        st.session_state.current_chat_id = None
+                    st.session_state.active_options_id = None
+                    st.rerun()
+
+            if st.session_state.rename_id == cid:
+                new_title = st.text_input("العنوان الجديد:", value=chat_data["title"], key=f"inp_{cid}")
+                if st.button("حفظ العنوان", key=f"save_{cid}", use_container_width=True):
+                    st.session_state.chats[cid]["title"] = new_title
+                    st.session_state.rename_id = None
+                    st.session_state.active_options_id = None
+                    st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.title("🧠 PulseAI")
     
     if st.button("محادثة جديدة", use_container_width=True):
         st.session_state.current_chat_id = None
+        st.session_state.active_options_id = None
         st.session_state.rename_id = None
         st.rerun()
 

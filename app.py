@@ -7,80 +7,148 @@ GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 st.set_page_config(
     page_title="PulseAI",
     page_icon="🧠",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# تنسيقات CSS احترافية لتصميم مشابهاً لـ ChatGPT
+# تصميم CSS كامل لمحاكاة واجهة Gemini / ChatGPT
 st.markdown("""
     <style>
-    .main { background-color: #0d1117; }
+    /* الخلفية العامة والخطوط */
+    .stApp {
+        background: radial-gradient(circle at 50% 30%, #1e2230 0%, #0e1117 100%);
+        color: #e6e6e6;
+    }
+    
+    /* الشريط الجانبي */
+    [data-testid="stSidebar"] {
+        background-color: #131722;
+        border-left: 1px solid #232736;
+    }
+    
+    /* أزرار الشريط الجانبي والمحادثات */
+    div.stButton > button {
+        background-color: transparent;
+        color: #c5c7d0;
+        border: none;
+        text-align: right;
+        justify-content: flex-start;
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 14px;
+        transition: 0.2s;
+    }
+    div.stButton > button:hover {
+        background-color: #232838;
+        color: #ffffff;
+    }
+    
+    /* زر محادثة جديدة المميز */
+    [data-testid="stSidebar"] div.stButton:first-child > button {
+        background-color: #1f2536;
+        border: 1px solid #2e364f;
+        font-weight: bold;
+    }
+    [data-testid="stSidebar"] div.stButton:first-child > button:hover {
+        background-color: #2b344c;
+    }
+
+    /* شاشة الترحيب في المنتصف */
+    .welcome-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 50vh;
+        text-align: center;
+    }
+    .welcome-title {
+        font-size: 2.8rem;
+        font-weight: bold;
+        color: #e2e8f0;
+        margin-bottom: 2rem;
+    }
+
+    /* رسائل الدردشة */
     [data-testid="stChatMessage"] {
         direction: rtl;
         text-align: right;
-        padding: 1rem;
-        border-radius: 10px;
-        margin-bottom: 0.5rem;
+        background-color: transparent;
     }
     [data-testid="stChatMessage"] p, [data-testid="stChatMessage"] div {
         unicode-bidi: plaintext;
         text-align: right;
     }
+    
+    /* شريط الإدخال المودرن */
+    [data-testid="stChatInput"] {
+        max-width: 750px;
+        margin: 0 auto;
+    }
     [data-testid="stChatInput"] input {
         direction: rtl;
         text-align: right;
+        background-color: #1e2333 !important;
+        border: 1px solid #323b54 !important;
+        border-radius: 25px !important;
+        color: #ffffff !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# إدارة الجلسات والسجل
+# إدارة المحادثات والجلسات
 if "chats" not in st.session_state:
-    st.session_state.chats = {"محادثة جديدة": []}
-if "current_chat" not in st.session_state:
-    st.session_state.current_chat = "محادثة جديدة"
+    st.session_state.chats = {}
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = None
 
-# الشريط الجانبي - إدارة المحادثات
+# الشريط الجانبي
 with st.sidebar:
     st.title("🧠 PulseAI")
     
     if st.button("➕ محادثة جديدة", use_container_width=True):
-        chat_count = len(st.session_state.chats) + 1
-        new_chat_name = f"محادثة {chat_count}"
-        st.session_state.chats[new_chat_name] = []
-        st.session_state.current_chat = new_chat_name
+        st.session_state.current_chat_id = None
         st.rerun()
 
-    st.subheader("💬 المحادثات")
-    chat_list = list(st.session_state.chats.keys())
+    st.markdown("### **الأحدث**")
     
-    for chat_name in chat_list:
-        if st.button(f"📄 {chat_name}", key=chat_name, use_container_width=True):
-            st.session_state.current_chat = chat_name
+    # عرض قائمة المحادثات السابقة
+    for chat_id, messages in list(st.session_state.chats.items()):
+        # اسم المحادثة هو أول سؤال سأله المستخدم
+        first_prompt = messages[0]["content"] if messages else "محادثة فارغة"
+        title = first_prompt[:25] + "..." if len(first_prompt) > 25 else first_prompt
+        
+        if st.button(f"💬 {title}", key=f"btn_{chat_id}", use_container_width=True):
+            st.session_state.current_chat_id = chat_id
             st.rerun()
 
     st.divider()
-    
     selected_model = st.selectbox(
-        "⚙️ النموذج:",
+        "النموذج:",
         ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
     )
 
-# هوية البوت الموحدة والحديثة
 SYSTEM_PROMPT = (
-    "أنت PulseAI، مساعد ذكاء اصطناعي شامل وشديد الذكاء مطوّر بواسطة PulseAI. "
-    "تستطيع مساعدة المستخدم في كافة المجالات مثل البرمجة، حل المشكلات، كتابة المحتوى، الترجمة والتحليل. "
-    "إذا سألك المستخدم عن اسمك أو هويتك، أجب دائماً بأنك PulseAI وتجنب تماماً القول بأنك ChatGPT أو تابع لـ OpenAI."
+    "أنت PulseAI، مساعد ذكاء اصطناعي شامل وفاخر مطوّر بواسطة PulseAI. "
+    "تساعد المستخدم بذكاء ودقة باللغة العربية تجيب بأسلوب احترافي ومباشر."
 )
 
-st.title(f"🧠 {st.session_state.current_chat}")
-st.divider()
+# عرض الرسائل أو شاشة الترحيب
+current_messages = st.session_state.chats.get(st.session_state.current_chat_id, [])
 
-# عرض الرسائل للحوار الحالي
-current_messages = st.session_state.chats[st.session_state.current_chat]
-for msg in current_messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+if not current_messages:
+    # شاشة الترحيب مثل Gemini عند فتح محادثة جديدة
+    st.markdown("""
+        <div class="welcome-container">
+            <div class="welcome-title">من أين نبدأ؟</div>
+        </div>
+    """, unsafe_allow_html=True)
+else:
+    for msg in current_messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-def ask_groq(prompt_text, primary_model):
+def ask_groq(messages_list, primary_model):
     fallback_models = [primary_model, "openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
     models_to_try = list(dict.fromkeys(fallback_models))
     
@@ -91,7 +159,7 @@ def ask_groq(prompt_text, primary_model):
     }
 
     messages_payload = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages_payload.extend([{"role": m["role"], "content": m["content"]} for m in current_messages])
+    messages_payload.extend([{"role": m["role"], "content": m["content"]} for m in messages_list])
 
     last_error = ""
     for model in models_to_try:
@@ -115,17 +183,27 @@ def ask_groq(prompt_text, primary_model):
 
     return None, last_error
 
-if prompt := st.chat_input("أسأل PulseAI أي شيء..."):
-    current_messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+# إدخال السؤال
+if prompt := st.chat_input("اسأل PulseAI..."):
+    # إنشاء رقم محادثة جديدة عند بدء كتابة أول سؤال
+    if st.session_state.current_chat_id is None:
+        new_id = f"chat_{int(time.time())}"
+        st.session_state.chats[new_id] = []
+        st.session_state.current_chat_id = new_id
 
+    chat_messages = st.session_state.chats[st.session_state.current_chat_id]
+    chat_messages.append({"role": "user", "content": prompt})
+    
+    st.rerun()
+
+# إذا كان هناك سؤال ينتظر الإجابة
+if current_messages and current_messages[-1]["role"] == "user":
     with st.chat_message("assistant"):
         with st.spinner("جاري التفكير..."):
-            answer, err = ask_groq(prompt, selected_model)
-            
+            answer, err = ask_groq(current_messages, selected_model)
             if answer:
                 st.markdown(answer)
                 current_messages.append({"role": "assistant", "content": answer})
+                st.rerun()
             else:
                 st.error(f"تنبيه: {err}")

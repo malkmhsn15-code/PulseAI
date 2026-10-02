@@ -30,21 +30,13 @@ st.markdown("""
         text-align: right;
         justify-content: flex-start;
         border-radius: 8px;
-        padding: 6px 10px;
-        font-size: 14px;
+        padding: 4px 8px;
+        font-size: 13px;
         transition: 0.2s;
     }
     div.stButton > button:hover {
         background-color: #232838;
         color: #ffffff;
-    }
-
-    .pinned-box {
-        background-color: #1a233a;
-        border-right: 4px solid #4f46e5;
-        padding: 10px;
-        border-radius: 8px;
-        margin-bottom: 15px;
     }
 
     .welcome-container {
@@ -130,43 +122,58 @@ def generate_chat_title(user_prompt, model):
         return title.strip().replace('"', '').replace("'", "")
     return user_prompt[:25]
 
+def render_chat_item(cid, chat_data):
+    col1, col2, col3, col4 = st.columns([0.5, 0.18, 0.16, 0.16])
+    
+    with col1:
+        if st.button(chat_data["title"], key=f"select_{cid}", use_container_width=True):
+            st.session_state.current_chat_id = cid
+            st.rerun()
+            
+    with col2:
+        pin_label = "إلغاء" if chat_data.get("pinned", False) else "تثبيت"
+        if st.button(pin_label, key=f"pin_{cid}"):
+            chat_data["pinned"] = not chat_data.get("pinned", False)
+            st.rerun()
+            
+    with col3:
+        if st.button("تعديل", key=f"ren_{cid}"):
+            st.session_state.rename_id = cid if st.session_state.rename_id != cid else None
+            st.rerun()
+            
+    with col4:
+        if st.button("حذف", key=f"del_{cid}"):
+            del st.session_state.chats[cid]
+            if st.session_state.current_chat_id == cid:
+                st.session_state.current_chat_id = None
+            st.rerun()
+            
+    if st.session_state.rename_id == cid:
+        new_title = st.text_input("العنوان الجديد:", value=chat_data["title"], key=f"inp_{cid}")
+        if st.button("حفظ", key=f"save_{cid}"):
+            st.session_state.chats[cid]["title"] = new_title
+            st.session_state.rename_id = None
+            st.rerun()
+
 with st.sidebar:
     st.title("🧠 PulseAI")
     
-    if st.button("➕ محادثة جديدة", use_container_width=True):
+    if st.button("محادثة جديدة", use_container_width=True):
         st.session_state.current_chat_id = None
         st.session_state.rename_id = None
         st.rerun()
 
+    pinned_chats = {cid: data for cid, data in st.session_state.chats.items() if data.get("pinned", False)}
+    recent_chats = {cid: data for cid, data in st.session_state.chats.items() if not data.get("pinned", False)}
+
+    if pinned_chats:
+        st.markdown("### **المثبتة**")
+        for cid, chat_data in list(pinned_chats.items()):
+            render_chat_item(cid, chat_data)
+
     st.markdown("### **الأحدث**")
-    
-    for cid, chat_data in list(st.session_state.chats.items()):
-        col1, col2, col3 = st.columns([0.7, 0.15, 0.15])
-        
-        with col1:
-            title_display = chat_data["title"]
-            if st.button(f"💬 {title_display}", key=f"select_{cid}", use_container_width=True):
-                st.session_state.current_chat_id = cid
-                st.rerun()
-                
-        with col2:
-            if st.button("✏️️", key=f"ren_{cid}"):
-                st.session_state.rename_id = cid if st.session_state.rename_id != cid else None
-                st.rerun()
-                
-        with col3:
-            if st.button("🗑️", key=f"del_{cid}"):
-                del st.session_state.chats[cid]
-                if st.session_state.current_chat_id == cid:
-                    st.session_state.current_chat_id = None
-                st.rerun()
-                
-        if st.session_state.rename_id == cid:
-            new_title = st.text_input("العنوان الجديد:", value=chat_data["title"], key=f"inp_{cid}")
-            if st.button("حفظ", key=f"save_{cid}"):
-                st.session_state.chats[cid]["title"] = new_title
-                st.session_state.rename_id = None
-                st.rerun()
+    for cid, chat_data in list(recent_chats.items()):
+        render_chat_item(cid, chat_data)
 
     st.divider()
     selected_model = st.selectbox(
@@ -183,25 +190,9 @@ if not current_chat or not current_chat["messages"]:
         </div>
     """, unsafe_allow_html=True)
 else:
-    if current_chat.get("pinned"):
-        st.markdown(f"""
-            <div class="pinned-box">
-                📌 <b>الرسالة المثبتة:</b><br>{current_chat['pinned']}
-            </div>
-        """, unsafe_allow_html=True)
-        if st.button("❌ إلغاء التثبيت", key="unpin_btn"):
-            current_chat["pinned"] = None
-            st.rerun()
-
-    for idx, msg in enumerate(current_chat["messages"]):
+    for msg in current_chat["messages"]:
         with st.chat_message(msg["role"]):
-            c1, c2 = st.columns([0.93, 0.07])
-            with c1:
-                st.markdown(msg["content"])
-            with c2:
-                if st.button("📌", key=f"pin_{idx}"):
-                    current_chat["pinned"] = msg["content"]
-                    st.rerun()
+            st.markdown(msg["content"])
 
 if prompt := st.chat_input("اسأل PulseAI..."):
     if st.session_state.current_chat_id is None:
@@ -210,7 +201,7 @@ if prompt := st.chat_input("اسأل PulseAI..."):
         st.session_state.chats[new_id] = {
             "title": smart_title,
             "messages": [],
-            "pinned": None
+            "pinned": False
         }
         st.session_state.current_chat_id = new_id
 

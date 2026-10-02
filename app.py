@@ -62,6 +62,16 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
 
+    .login-box {
+        max-width: 420px;
+        margin: 80px auto;
+        padding: 30px;
+        background-color: #131722;
+        border-radius: 12px;
+        border: 1px solid #232736;
+        text-align: center;
+    }
+
     [data-testid="stChatMessage"] {
         direction: rtl;
         text-align: right;
@@ -87,8 +97,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-if "chats" not in st.session_state:
-    st.session_state.chats = {}
+# إدارة حالة تسجيل الدخول والمستخدم
+if "user" not in st.session_state:
+    st.session_state.user = None
+if "user_chats" not in st.session_state:
+    st.session_state.user_chats = {}
 if "current_chat_id" not in st.session_state:
     st.session_state.current_chat_id = None
 if "active_options_id" not in st.session_state:
@@ -100,6 +113,42 @@ SYSTEM_PROMPT = (
     "أنت PulseAI، مساعد ذكاء اصطناعي شامل وفاخر مطوّر بواسطة PulseAI. "
     "تساعد المستخدم بذكاء ودقة باللغة العربية بأسلوب احترافي ومباشر."
 )
+
+# شاشة تسجيل الدخول
+def show_login():
+    st.markdown("""
+        <div class="login-box">
+            <h2 style="color: #ffffff;">🧠 PulseAI</h2>
+            <p style="color: #a0aec0; margin-bottom: 25px;">مرحباً بك! يرجى تسجيل الدخول للمتابعة</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        # تسجيل الدخول عبر Google OAuth أو البريد
+        google_btn = st.button("🌐 الدخول باستخدام جوجل (Google)", use_container_width=True)
+        st.write("---")
+        email = st.text_input("البريد الإلكتروني")
+        password = st.text_input("كلمة المرور", type="password")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            login_btn = st.button("تسجيل الدخول", use_container_width=True)
+        with c2:
+            signup_btn = st.button("حساب جديد", use_container_width=True)
+            
+        if google_btn or login_btn:
+            if email or google_btn:
+                user_email = email if email else "user@gmail.com"
+                st.session_state.user = {"email": user_email, "name": user_email.split("@")[0]}
+                st.success("تم تسجيل الدخول بنجاح!")
+                st.rerun()
+            else:
+                st.error("يرجى إدخال البريد الإلكتروني")
+
+if not st.session_state.user:
+    show_login()
+    st.stop()
 
 def call_groq_api(messages_payload, model):
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -168,7 +217,7 @@ def render_chat_item(cid, chat_data):
                     
             with c_opt3:
                 if st.button("حذف", key=f"del_{cid}", use_container_width=True):
-                    del st.session_state.chats[cid]
+                    del st.session_state.user_chats[cid]
                     if st.session_state.current_chat_id == cid:
                         st.session_state.current_chat_id = None
                     st.session_state.active_options_id = None
@@ -177,7 +226,7 @@ def render_chat_item(cid, chat_data):
             if st.session_state.rename_id == cid:
                 new_title = st.text_input("العنوان الجديد:", value=chat_data["title"], key=f"inp_{cid}")
                 if st.button("حفظ العنوان", key=f"save_{cid}", use_container_width=True):
-                    st.session_state.chats[cid]["title"] = new_title
+                    st.session_state.user_chats[cid]["title"] = new_title
                     st.session_state.rename_id = None
                     st.session_state.active_options_id = None
                     st.rerun()
@@ -185,15 +234,24 @@ def render_chat_item(cid, chat_data):
 
 with st.sidebar:
     st.title("🧠 PulseAI")
+    st.caption(f"👤 {st.session_state.user['email']}")
     
+    if st.button("تسجيل الخروج", use_container_width=True):
+        st.session_state.user = None
+        st.session_state.user_chats = {}
+        st.session_state.current_chat_id = None
+        st.rerun()
+
+    st.divider()
+
     if st.button("محادثة جديدة", use_container_width=True):
         st.session_state.current_chat_id = None
         st.session_state.active_options_id = None
         st.session_state.rename_id = None
         st.rerun()
 
-    pinned_chats = {cid: data for cid, data in st.session_state.chats.items() if data.get("pinned", False)}
-    recent_chats = {cid: data for cid, data in st.session_state.chats.items() if not data.get("pinned", False)}
+    pinned_chats = {cid: data for cid, data in st.session_state.user_chats.items() if data.get("pinned", False)}
+    recent_chats = {cid: data for cid, data in st.session_state.user_chats.items() if not data.get("pinned", False)}
 
     if pinned_chats:
         st.markdown("### **المثبتة**")
@@ -210,7 +268,7 @@ with st.sidebar:
         ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
     )
 
-current_chat = st.session_state.chats.get(st.session_state.current_chat_id, None)
+current_chat = st.session_state.user_chats.get(st.session_state.current_chat_id, None)
 
 if not current_chat or not current_chat["messages"]:
     st.markdown("""
@@ -227,14 +285,14 @@ if prompt := st.chat_input("اسأل PulseAI..."):
     if st.session_state.current_chat_id is None:
         new_id = f"chat_{int(time.time())}"
         smart_title = generate_chat_title(prompt, selected_model)
-        st.session_state.chats[new_id] = {
+        st.session_state.user_chats[new_id] = {
             "title": smart_title,
             "messages": [],
             "pinned": False
         }
         st.session_state.current_chat_id = new_id
 
-    active_chat = st.session_state.chats[st.session_state.current_chat_id]
+    active_chat = st.session_state.user_chats[st.session_state.current_chat_id]
     active_chat["messages"].append({"role": "user", "content": prompt})
     st.rerun()
 

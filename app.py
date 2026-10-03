@@ -175,13 +175,19 @@ def show_login():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         try:
-            google_auth_res = supabase.auth.get_oauth_sign_in_url({
+            google_auth_res = supabase.auth.sign_in_with_oauth({
                 "provider": "google",
-                "redirect_to": "https://pulseai-fftvktkyjjfexvce6capphx.streamlit.app"
+                "options": {
+                    "redirect_to": "https://pulseai-fftvktkyjjfexvce6capphx.streamlit.app"
+                }
             })
-            st.link_button("🌐 الدخول باستخدام جوجل (Google)", google_auth_res.url, use_container_width=True)
+            auth_url = getattr(google_auth_res, "url", None) or (google_auth_res.get("url") if isinstance(google_auth_res, dict) else None)
+            if auth_url:
+                st.link_button("🌐 الدخول باستخدام جوجل (Google)", auth_url, use_container_width=True)
+            else:
+                st.error("فشل الحصول على رابط تسجيل الدخول عبر Google")
         except Exception as e:
-            st.error("تأكد من تفعيل Google Provider وإعداد المفاتيح في Supabase")
+            st.error(f"حدث خطأ في جلب رابط تسجيل الدخول: {e}")
 
         st.write("---")
         email = st.text_input("البريد الإلكتروني")

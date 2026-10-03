@@ -7,6 +7,8 @@ GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
+APP_URL = "https://pulseai-fftvktkyjjfexvce6capphx.streamlit.app"
+
 @st.cache_resource
 def init_supabase() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -19,6 +21,17 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+query_params = st.query_params
+if "code" in query_params:
+    auth_code = query_params["code"]
+    try:
+        res = supabase.auth.exchange_code_for_session({"auth_code": auth_code})
+        st.session_state.user = res.user
+        st.query_params.clear()
+        st.rerun()
+    except Exception:
+        st.query_params.clear()
 
 st.markdown("""
     <style>
@@ -178,7 +191,7 @@ def show_login():
             google_auth_res = supabase.auth.sign_in_with_oauth({
                 "provider": "google",
                 "options": {
-                    "redirect_to": "https://pulseai-fftvktkyjjfexvce6capphx.streamlit.app"
+                    "redirect_to": APP_URL
                 }
             })
             auth_url = getattr(google_auth_res, "url", None) or (google_auth_res.get("url") if isinstance(google_auth_res, dict) else None)

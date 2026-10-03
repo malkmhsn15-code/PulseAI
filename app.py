@@ -15,6 +15,14 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
+def get_authenticated_supabase() -> Client:
+    session = st.session_state.get("session")
+    if session and hasattr(session, "access_token"):
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        client.postgrest.auth(session.access_token)
+        return client
+    return supabase
+
 st.set_page_config(
     page_title="PulseAI",
     page_icon="🧠",
@@ -28,6 +36,7 @@ if "code" in query_params:
     try:
         res = supabase.auth.exchange_code_for_session({"auth_code": auth_code})
         st.session_state.user = res.user
+        st.session_state.session = res.session
         st.query_params.clear()
         st.rerun()
     except Exception:
@@ -121,6 +130,8 @@ st.markdown("""
 
 if "user" not in st.session_state:
     st.session_state.user = None
+if "session" not in st.session_state:
+    st.session_state.session = None
 if "user_chats" not in st.session_state:
     st.session_state.user_chats = {}
 if "current_chat_id" not in st.session_state:
@@ -137,7 +148,8 @@ SYSTEM_PROMPT = (
 
 def load_user_chats(user_id):
     try:
-        res = supabase.table("user_chats").select("*").eq("user_id", user_id).execute()
+        db_client = get_authenticated_supabase()
+        res = db_client.table("user_chats").select("*").eq("user_id", user_id).execute()
         chats = {}
         for row in res.data:
             chats[row["id"]] = {
@@ -152,7 +164,8 @@ def load_user_chats(user_id):
 
 def save_chat_to_db(chat_id, user_id, title, pinned, messages):
     try:
-        supabase.table("user_chats").upsert({
+        db_client = get_authenticated_supabase()
+        db_client.table("user_chats").upsert({
             "id": chat_id,
             "user_id": user_id,
             "title": title,
@@ -164,7 +177,8 @@ def save_chat_to_db(chat_id, user_id, title, pinned, messages):
 
 def delete_chat_from_db(chat_id):
     try:
-        supabase.table("user_chats").delete().eq("id", chat_id).execute()
+        db_client = get_authenticated_supabase()
+        db_client.table("user_chats").delete().eq("id", chat_id).execute()
     except Exception as e:
         st.error(f"خطأ أثناء حذف المحادثة: {e}")
 
@@ -172,6 +186,7 @@ try:
     session = supabase.auth.get_session()
     if session and session.user:
         st.session_state.user = session.user
+        st.session_state.session = session
         if not st.session_state.user_chats:
             st.session_state.user_chats = load_user_chats(session.user.id)
 except Exception:
@@ -217,6 +232,7 @@ def show_login():
                 try:
                     res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     st.session_state.user = res.user
+                    st.session_state.session = res.session
                     st.session_state.user_chats = load_user_chats(res.user.id)
                     st.success("تم تسجيل الدخول بنجاح!")
                     st.rerun()
@@ -335,6 +351,7 @@ with st.sidebar:
         except Exception:
             pass
         st.session_state.user = None
+        st.session_state.session = None
         st.session_state.user_chats = {}
         st.session_state.current_chat_id = None
         st.rerun()
@@ -362,7 +379,7 @@ with st.sidebar:
     st.divider()
     selected_model = st.selectbox(
         "النموذج:",
-        ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+        ["llama-3.3-70b-versatile", "llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it"]
     )
 
 current_chat = st.session_state.user_chats.get(st.session_state.current_chat_id, None)

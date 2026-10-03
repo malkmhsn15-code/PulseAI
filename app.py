@@ -1,8 +1,17 @@
 import streamlit as st
 import requests
 import time
+from supabase import create_client, Client
 
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
+
+@st.cache_resource
+def init_supabase() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase = init_supabase()
 
 st.set_page_config(
     page_title="PulseAI",
@@ -64,8 +73,8 @@ st.markdown("""
 
     .login-box {
         max-width: 420px;
-        margin: 80px auto;
-        padding: 30px;
+        margin: 40px auto 10px auto;
+        padding: 20px;
         background-color: #131722;
         border-radius: 12px;
         border: 1px solid #232736;
@@ -97,7 +106,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# إدارة حالة تسجيل الدخول والمستخدم
 if "user" not in st.session_state:
     st.session_state.user = None
 if "user_chats" not in st.session_state:
@@ -114,19 +122,67 @@ SYSTEM_PROMPT = (
     "تساعد المستخدم بذكاء ودقة باللغة العربية بأسلوب احترافي ومباشر."
 )
 
-# شاشة تسجيل الدخول
+def load_user_chats(user_id):
+    try:
+        res = supabase.table("user_chats").select("*").eq("user_id", user_id).execute()
+        chats = {}
+        for row in res.data:
+            chats[row["id"]] = {
+                "title": row["title"],
+                "pinned": row.get("pinned", False),
+                "messages": row.get("messages", [])
+            }
+        return chats
+    except Exception as e:
+        st.error(f"خطأ في جلب المحادثات: {e}")
+        return {}
+
+def save_chat_to_db(chat_id, user_id, title, pinned, messages):
+    try:
+        supabase.table("user_chats").upsert({
+            "id": chat_id,
+            "user_id": user_id,
+            "title": title,
+            "pinned": pinned,
+            "messages": messages
+        }).execute()
+    except Exception as e:
+        st.error(f"خطأ أثناء حفظ المحادثة: {e}")
+
+def delete_chat_from_db(chat_id):
+    try:
+        supabase.table("user_chats").delete().eq("id", chat_id).execute()
+    except Exception as e:
+        st.error(f"خطأ أثناء حذف المحادثة: {e}")
+
+try:
+    session = supabase.auth.get_session()
+    if session and session.user:
+        st.session_state.user = session.user
+        if not st.session_state.user_chats:
+            st.session_state.user_chats = load_user_chats(session.user.id)
+except Exception:
+    pass
+
 def show_login():
     st.markdown("""
         <div class="login-box">
             <h2 style="color: #ffffff;">🧠 PulseAI</h2>
-            <p style="color: #a0aec0; margin-bottom: 25px;">مرحباً بك! يرجى تسجيل الدخول للمتابعة</p>
+            <p style="color: #a0aec0; margin-bottom: 15px;">مرحباً بك! يرجى تسجيل الدخول للمتابعة</p>
         </div>
     """, unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # تسجيل الدخول عبر Google OAuth أو البريد
-        google_btn = st.button("🌐 الدخول باستخدام جوجل (Google)", use_container_width=True)
+        try:
+            google_auth_res = supabase.auth.get_oauth_sign_in_url({
+                "provider": "google",
+                "redirect_to": "https://pulseai-fftvktkyjjfexvce6capphx.streamlit.app"
+            })
+            st.link_button("🌐 الدخول باستخدام جوجل (Google)", google_auth_res.url, use_container_width=True)
+        except Exception as e:
+            st.error("تأكد من تفعيل Google Provider وإعداد المفاتيح في Supabase")
+
         st.write("---")
         email = st.text_input("البريد الإلكتروني")
         password = st.text_input("كلمة المرور", type="password")
@@ -137,14 +193,28 @@ def show_login():
         with c2:
             signup_btn = st.button("حساب جديد", use_container_width=True)
             
-        if google_btn or login_btn:
-            if email or google_btn:
-                user_email = email if email else "user@gmail.com"
-                st.session_state.user = {"email": user_email, "name": user_email.split("@")[0]}
-                st.success("تم تسجيل الدخول بنجاح!")
-                st.rerun()
+        if login_btn:
+            if email and password:
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                    st.session_state.user = res.user
+                    st.session_state.user_chats = load_user_chats(res.user.id)
+                    st.success("تم تسجيل الدخول بنجاح!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"فشل تسجيل الدخول: {e}")
             else:
-                st.error("يرجى إدخال البريد الإلكتروني")
+                st.error("يرجى إدخال البريد الإلكتروني وكلمة المرور")
+
+        if signup_btn:
+            if email and password:
+                try:
+                    res = supabase.auth.sign_up({"email": email, "password": password})
+                    st.success("تم إنشاء الحساب! يمكنك الآن تسجيل الدخول.")
+                except Exception as e:
+                    st.error(f"فشل إنشاء الحساب: {e}")
+            else:
+                st.error("يرجى إدخال البريد الإلكتروني وكلمة المرور")
 
 if not st.session_state.user:
     show_login()
@@ -207,6 +277,7 @@ def render_chat_item(cid, chat_data):
                 pin_label = "إلغاء التثبيت" if chat_data.get("pinned", False) else "تثبيت"
                 if st.button(pin_label, key=f"pin_{cid}", use_container_width=True):
                     chat_data["pinned"] = not chat_data.get("pinned", False)
+                    save_chat_to_db(cid, st.session_state.user.id, chat_data["title"], chat_data["pinned"], chat_data["messages"])
                     st.session_state.active_options_id = None
                     st.rerun()
                     
@@ -217,6 +288,7 @@ def render_chat_item(cid, chat_data):
                     
             with c_opt3:
                 if st.button("حذف", key=f"del_{cid}", use_container_width=True):
+                    delete_chat_from_db(cid)
                     del st.session_state.user_chats[cid]
                     if st.session_state.current_chat_id == cid:
                         st.session_state.current_chat_id = None
@@ -227,6 +299,7 @@ def render_chat_item(cid, chat_data):
                 new_title = st.text_input("العنوان الجديد:", value=chat_data["title"], key=f"inp_{cid}")
                 if st.button("حفظ العنوان", key=f"save_{cid}", use_container_width=True):
                     st.session_state.user_chats[cid]["title"] = new_title
+                    save_chat_to_db(cid, st.session_state.user.id, new_title, chat_data["pinned"], chat_data["messages"])
                     st.session_state.rename_id = None
                     st.session_state.active_options_id = None
                     st.rerun()
@@ -234,9 +307,14 @@ def render_chat_item(cid, chat_data):
 
 with st.sidebar:
     st.title("🧠 PulseAI")
-    st.caption(f"👤 {st.session_state.user['email']}")
+    user_email = getattr(st.session_state.user, "email", "مستخدم مسجّل")
+    st.caption(f"👤 {user_email}")
     
     if st.button("تسجيل الخروج", use_container_width=True):
+        try:
+            supabase.auth.sign_out()
+        except Exception:
+            pass
         st.session_state.user = None
         st.session_state.user_chats = {}
         st.session_state.current_chat_id = None
@@ -294,6 +372,14 @@ if prompt := st.chat_input("اسأل PulseAI..."):
 
     active_chat = st.session_state.user_chats[st.session_state.current_chat_id]
     active_chat["messages"].append({"role": "user", "content": prompt})
+    
+    save_chat_to_db(
+        st.session_state.current_chat_id,
+        st.session_state.user.id,
+        active_chat["title"],
+        active_chat["pinned"],
+        active_chat["messages"]
+    )
     st.rerun()
 
 if current_chat and current_chat["messages"] and current_chat["messages"][-1]["role"] == "user":
@@ -306,6 +392,14 @@ if current_chat and current_chat["messages"] and current_chat["messages"][-1]["r
             if answer:
                 st.markdown(answer)
                 current_chat["messages"].append({"role": "assistant", "content": answer})
+                
+                save_chat_to_db(
+                    st.session_state.current_chat_id,
+                    st.session_state.user.id,
+                    current_chat["title"],
+                    current_chat["pinned"],
+                    current_chat["messages"]
+                )
                 st.rerun()
             else:
                 st.error(f"تنبيه: {err}")

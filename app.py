@@ -379,7 +379,7 @@ with st.sidebar:
     st.divider()
     selected_model = st.selectbox(
         "النموذج:",
-        ["llama-3.3-70b-versatile", "llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it"]
+        ["llama-3.1-8b-instant", "llama3-70b-8192", "mixtral-8x7b-32768", "gemma2-9b-it"]
     )
 
 current_chat = st.session_state.user_chats.get(st.session_state.current_chat_id, None)

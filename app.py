@@ -30,6 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# التعامل مع الروابط العائدة من تسجيل الدخول
 query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
@@ -149,7 +150,7 @@ SYSTEM_PROMPT = (
 def load_user_chats(user_id):
     try:
         db_client = get_authenticated_supabase()
-        res = db_client.table("user_chats").select("*").eq("user_id", user_id).execute()
+        res = db_client.table("user_chats").select("*").eq("user_id", str(user_id)).execute()
         chats = {}
         for row in res.data:
             chats[row["id"]] = {
@@ -167,7 +168,7 @@ def save_chat_to_db(chat_id, user_id, title, pinned, messages):
         db_client = get_authenticated_supabase()
         db_client.table("user_chats").upsert({
             "id": chat_id,
-            "user_id": user_id,
+            "user_id": str(user_id),
             "title": title,
             "pinned": pinned,
             "messages": messages
@@ -181,16 +182,6 @@ def delete_chat_from_db(chat_id):
         db_client.table("user_chats").delete().eq("id", chat_id).execute()
     except Exception as e:
         st.error(f"خطأ أثناء حذف المحادثة: {e}")
-
-try:
-    session = supabase.auth.get_session()
-    if session and session.user:
-        st.session_state.user = session.user
-        st.session_state.session = session
-        if not st.session_state.user_chats:
-            st.session_state.user_chats = load_user_chats(session.user.id)
-except Exception:
-    pass
 
 def show_login():
     st.markdown("""

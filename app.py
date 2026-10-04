@@ -23,10 +23,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-if "cookie_manager" not in st.session_state:
-    st.session_state.cookie_manager = stx.CookieManager(key="main_cookie_manager")
-
-cookie_manager = st.session_state.cookie_manager
+cookie_manager = stx.CookieManager(key="cookie_manager_v2")
 
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -64,22 +61,6 @@ def load_user_chats(user_id):
     except Exception:
         return {}
 
-cookies = cookie_manager.get_all()
-
-if not st.session_state.user and isinstance(cookies, dict):
-    access_token = cookies.get('sb_access_token')
-    refresh_token = cookies.get('sb_refresh_token')
-
-    if access_token and refresh_token:
-        try:
-            res = supabase.auth.set_session(access_token, refresh_token)
-            if res and hasattr(res, "user") and res.user:
-                st.session_state.user = res.user
-                st.session_state.session = res.session
-                st.session_state.user_chats = load_user_chats(res.user.id)
-        except Exception:
-            pass
-
 query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
@@ -90,14 +71,34 @@ if "code" in query_params:
             st.session_state.session = res.session
             
             if res.session and hasattr(res.session, "access_token"):
-                cookie_manager.set('sb_access_token', res.session.access_token, key='set_acc_oauth', max_age=30*24*60*60)
-                cookie_manager.set('sb_refresh_token', res.session.refresh_token, key='set_ref_oauth', max_age=30*24*60*60)
+                cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60)
+                cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60)
             
             st.session_state.user_chats = load_user_chats(res.user.id)
             st.query_params.clear()
             st.rerun()
     except Exception:
         st.query_params.clear()
+
+cookies = cookie_manager.get_all()
+
+if not st.session_state.user:
+    if cookies is None:
+        st.stop()
+    elif isinstance(cookies, dict):
+        access_token = cookies.get('sb_access_token')
+        refresh_token = cookies.get('sb_refresh_token')
+
+        if access_token and refresh_token:
+            try:
+                res = supabase.auth.set_session(access_token, refresh_token)
+                if res and hasattr(res, "user") and res.user:
+                    st.session_state.user = res.user
+                    st.session_state.session = res.session
+                    st.session_state.user_chats = load_user_chats(res.user.id)
+                    st.rerun()
+            except Exception:
+                pass
 
 st.markdown("""
     <style>
@@ -285,8 +286,8 @@ def show_login():
                     st.session_state.session = res.session
                     
                     if res.session and hasattr(res.session, "access_token"):
-                        cookie_manager.set('sb_access_token', res.session.access_token, key='set_acc_pass', max_age=30*24*60*60)
-                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, key='set_ref_pass', max_age=30*24*60*60)
+                        cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60)
+                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60)
                     
                     st.session_state.user_chats = load_user_chats(res.user.id)
                     st.rerun()

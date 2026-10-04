@@ -40,18 +40,29 @@ if "active_options_id" not in st.session_state:
     st.session_state.active_options_id = None
 if "rename_id" not in st.session_state:
     st.session_state.rename_id = None
+if "cookies_initialized" not in st.session_state:
+    st.session_state.cookies_initialized = False
 
-access_token = cookie_manager.get('sb_access_token')
-refresh_token = cookie_manager.get('sb_refresh_token')
+cookies = cookie_manager.get_all()
 
-if access_token and refresh_token and not st.session_state.user:
-    try:
-        res = supabase.auth.set_session(access_token, refresh_token)
-        if res and hasattr(res, "user") and res.user:
-            st.session_state.user = res.user
-            st.session_state.session = res.session
-    except Exception:
-        pass
+if not st.session_state.user:
+    access_token = cookies.get('sb_access_token') if isinstance(cookies, dict) else None
+    refresh_token = cookies.get('sb_refresh_token') if isinstance(cookies, dict) else None
+
+    if access_token and refresh_token:
+        try:
+            res = supabase.auth.set_session(access_token, refresh_token)
+            if res and hasattr(res, "user") and res.user:
+                st.session_state.user = res.user
+                st.session_state.session = res.session
+                st.session_state.user_chats = load_user_chats(res.user.id)
+                st.rerun()
+        except Exception:
+            pass
+    elif not st.session_state.cookies_initialized:
+        st.session_state.cookies_initialized = True
+        time.sleep(0.2)
+        st.rerun()
 
 query_params = st.query_params
 if "code" in query_params:

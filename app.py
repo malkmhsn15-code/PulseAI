@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import time
 from supabase import create_client, Client
+import extra_streamlit_components as stx
 
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
@@ -22,6 +23,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+cookie_manager = stx.get_cookie_manager()
+
 if "user" not in st.session_state:
     st.session_state.user = None
 if "session" not in st.session_state:
@@ -35,12 +38,15 @@ if "active_options_id" not in st.session_state:
 if "rename_id" not in st.session_state:
     st.session_state.rename_id = None
 
-if not st.session_state.user:
+access_token = cookie_manager.get('sb_access_token')
+refresh_token = cookie_manager.get('sb_refresh_token')
+
+if access_token and refresh_token and not st.session_state.user:
     try:
-        current_session = supabase.auth.get_session()
-        if current_session and getattr(current_session, "user", None):
-            st.session_state.user = current_session.user
-            st.session_state.session = current_session
+        res = supabase.auth.set_session(access_token, refresh_token)
+        if res and hasattr(res, "user") and res.user:
+            st.session_state.user = res.user
+            st.session_state.session = res.session
     except Exception:
         pass
 
@@ -52,6 +58,11 @@ if "code" in query_params:
         if res and hasattr(res, "user") and res.user:
             st.session_state.user = res.user
             st.session_state.session = res.session
+            
+            if res.session and hasattr(res.session, "access_token"):
+                cookie_manager.set('sb_access_token', res.session.access_token, key='set_acc_oauth')
+                cookie_manager.set('sb_refresh_token', res.session.refresh_token, key='set_ref_oauth')
+            
             st.query_params.clear()
             st.rerun()
     except Exception:
@@ -264,6 +275,11 @@ def show_login():
                     res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                     st.session_state.user = res.user
                     st.session_state.session = res.session
+                    
+                    if res.session and hasattr(res.session, "access_token"):
+                        cookie_manager.set('sb_access_token', res.session.access_token, key='set_acc_pass')
+                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, key='set_ref_pass')
+                    
                     st.session_state.user_chats = load_user_chats(res.user.id)
                     st.rerun()
                 except Exception as e:
@@ -381,6 +397,10 @@ with st.sidebar:
             supabase.auth.sign_out()
         except Exception:
             pass
+        
+        cookie_manager.delete('sb_access_token')
+        cookie_manager.delete('sb_refresh_token')
+        
         st.session_state.user = None
         st.session_state.session = None
         st.session_state.user_chats = {}

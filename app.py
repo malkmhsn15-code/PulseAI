@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-cookie_manager = stx.CookieManager(key="cookie_manager_v2")
+cookie_manager = stx.CookieManager(key="cookie_manager_stable")
 
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -80,11 +80,12 @@ if "code" in query_params:
     except Exception:
         st.query_params.clear()
 
-cookies = cookie_manager.get_all()
-
 if not st.session_state.user:
+    cookies = cookie_manager.get_all()
+    
     if cookies is None:
-        st.stop()
+        time.sleep(1)
+        st.rerun()
     elif isinstance(cookies, dict):
         access_token = cookies.get('sb_access_token')
         refresh_token = cookies.get('sb_refresh_token')
@@ -290,6 +291,7 @@ def show_login():
                         cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60)
                     
                     st.session_state.user_chats = load_user_chats(res.user.id)
+                    time.sleep(0.5)
                     st.rerun()
                 except Exception as e:
                     st.error(f"فشل تسجيل الدخول: {e}")

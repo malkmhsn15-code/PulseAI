@@ -30,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# معالجة رمز المصادقة عند العودة من Google
+# التعامل مع الروابط العائدة من تسجيل الدخول
 query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
@@ -45,6 +45,17 @@ if "code" in query_params:
 
 st.markdown("""
     <style>
+    /* 1. إخفاء القائمة العلوية وأزرار Streamlit (Fork / GitHub / Toolbar) */
+    header {visibility: hidden !important;}
+    #MainMenu {visibility: hidden !important;}
+    footer {visibility: hidden !important;}
+    [data-testid="stDecoration"] {display: none !important;}
+    [data-testid="stHeader"] {display: none !important;}
+    
+    /* إخفاء الأزرار والأيقونات العائمة في الأسفل */
+    .stAppToolbar {display: none !important;}
+    iframe[title="streamlit_app"] {display: none !important;}
+    
     .stApp {
         background: radial-gradient(circle at 50% 30%, #1e2230 0%, #0e1117 100%);
         color: #e6e6e6;
@@ -79,19 +90,27 @@ st.markdown("""
         border: 1px solid #2e364f;
     }
 
+    /* 2. ضبط الشاشة للموبايل عند ظهور الكيبورد */
+    .main .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 7rem !important;
+        max-width: 100% !important;
+    }
+
     .welcome-container {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        height: 45vh;
+        min-height: 25vh;
         text-align: center;
+        margin-top: 20px;
     }
     .welcome-title {
-        font-size: 2.8rem;
+        font-size: 2.2rem;
         font-weight: bold;
         color: #e2e8f0;
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem;
     }
 
     .login-box {
@@ -117,6 +136,11 @@ st.markdown("""
     [data-testid="stChatInput"] {
         max-width: 750px;
         margin: 0 auto;
+        position: fixed;
+        bottom: 20px;
+        left: 0;
+        right: 0;
+        z-index: 999;
     }
     [data-testid="stChatInput"] input {
         direction: rtl;
@@ -246,7 +270,6 @@ if not st.session_state.user:
     show_login()
     st.stop()
 
-# تحميل المحادثات التلقائي عند وجود جلسة سابقة
 if st.session_state.user and not st.session_state.user_chats:
     st.session_state.user_chats = load_user_chats(st.session_state.user.id)
 

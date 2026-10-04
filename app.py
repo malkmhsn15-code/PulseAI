@@ -37,6 +37,8 @@ if "active_options_id" not in st.session_state:
     st.session_state.active_options_id = None
 if "rename_id" not in st.session_state:
     st.session_state.rename_id = None
+if "cookies_loaded" not in st.session_state:
+    st.session_state.cookies_loaded = False
 
 def get_authenticated_supabase() -> Client:
     session = st.session_state.get("session")
@@ -83,6 +85,12 @@ if "code" in query_params:
 
 if not st.session_state.user:
     all_cookies = cookie_manager.get_all()
+    
+    if not all_cookies and not st.session_state.cookies_loaded:
+        time.sleep(0.5)
+        st.session_state.cookies_loaded = True
+        st.rerun()
+
     if all_cookies:
         acc_token = all_cookies.get('sb_access_token')
         ref_token = all_cookies.get('sb_refresh_token')
@@ -402,6 +410,7 @@ with st.sidebar:
         st.session_state.session = None
         st.session_state.user_chats = {}
         st.session_state.current_chat_id = None
+        st.session_state.cookies_loaded = False
         st.rerun()
 
     st.divider()

@@ -10,18 +10,18 @@ SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
 APP_URL = "https://pulseai-fftvktkyjjfexvce6capphx.streamlit.app"
 
-@st.cache_resource
-def init_supabase() -> Client:
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
-
-supabase = init_supabase()
-
 st.set_page_config(
     page_title="PulseAI",
     page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+@st.cache_resource
+def init_supabase() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase = init_supabase()
 
 cookie_manager = stx.CookieManager(key="cookie_manager_stable")
 
@@ -72,55 +72,45 @@ if "code" in query_params:
             st.session_state.user_chats = load_user_chats(res.user.id)
             
             if res.session and hasattr(res.session, "access_token"):
-                cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60, key="set_acc")
-                cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_ref")
+                cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60, key="set_oauth_acc")
+                cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_oauth_ref")
             
             st.query_params.clear()
-            time.sleep(0.5)
+            time.sleep(1)
             st.rerun()
     except Exception:
         st.query_params.clear()
 
 if not st.session_state.user:
-    access_token = cookie_manager.get('sb_access_token')
-    refresh_token = cookie_manager.get('sb_refresh_token')
-
-    if access_token and refresh_token:
-        try:
-            res = supabase.auth.set_session(access_token, refresh_token)
-            if res and hasattr(res, "user") and res.user:
-                st.session_state.user = res.user
-                st.session_state.session = res.session
-                st.session_state.user_chats = load_user_chats(res.user.id)
-                st.rerun()
-        except Exception:
-            cookie_manager.delete('sb_access_token')
-            cookie_manager.delete('sb_refresh_token')
+    all_cookies = cookie_manager.get_all()
+    if all_cookies:
+        acc_token = all_cookies.get('sb_access_token')
+        ref_token = all_cookies.get('sb_refresh_token')
+        if acc_token and ref_token:
+            try:
+                res = supabase.auth.set_session(acc_token, ref_token)
+                if res and hasattr(res, "user") and res.user:
+                    st.session_state.user = res.user
+                    st.session_state.session = res.session
+                    st.session_state.user_chats = load_user_chats(res.user.id)
+                    st.rerun()
+            except Exception:
+                pass
 
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     [data-testid="stAppDeployButton"] {display: none !important;}
-    [data-testid="stToolbar"] {display: none !important;}
-    [data-testid="stDecoration"] {display: none !important;}
-    .stAppToolbar {display: none !important;}
-    iframe[title="streamlit_app"] {display: none !important;}
     
-    [data-testid="stSidebarNav"] {display: none !important;}
-    [data-testid="stHeader"] {
-        background-color: transparent !important;
-        z-index: 99999 !important;
-    }
-    [data-testid="stSidebarCollapsedControl"] {
-        display: block !important;
+    [data-testid="stSidebarCollapseButton"], 
+    [data-testid="stSidebarExpandButton"],
+    [data-testid="stSidebarHeader"] {
+        visibility: visible !important;
+        display: flex !important;
         color: #ffffff !important;
-        background-color: #1e2333 !important;
-        border-radius: 8px !important;
-        padding: 4px !important;
-        margin: 8px !important;
     }
-
+    
     .stApp {
         background: radial-gradient(circle at 50% 30%, #1e2230 0%, #0e1117 100%);
         color: #e6e6e6;
@@ -138,8 +128,8 @@ st.markdown("""
         text-align: right;
         justify-content: flex-start;
         border-radius: 8px;
-        padding: 4px 8px;
-        font-size: 13px;
+        padding: 6px 10px;
+        font-size: 14px;
         transition: 0.2s;
     }
     div.stButton > button:hover {
@@ -156,7 +146,7 @@ st.markdown("""
     }
 
     .main .block-container {
-        padding-top: 3rem !important;
+        padding-top: 2rem !important;
         padding-bottom: 7rem !important;
         max-width: 100% !important;
     }
@@ -283,11 +273,11 @@ def show_login():
                     st.session_state.session = res.session
                     
                     if res.session and hasattr(res.session, "access_token"):
-                        cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60, key="set_acc_login")
-                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_ref_login")
+                        cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60, key="set_pass_acc")
+                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_pass_ref")
                     
                     st.session_state.user_chats = load_user_chats(res.user.id)
-                    time.sleep(0.5)
+                    time.sleep(1)
                     st.rerun()
                 except Exception as e:
                     st.error(f"فشل تسجيل الدخول: {e}")

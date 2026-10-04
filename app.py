@@ -15,14 +15,6 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
-def get_authenticated_supabase() -> Client:
-    session = st.session_state.get("session")
-    if session and hasattr(session, "access_token"):
-        client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        client.postgrest.auth(session.access_token)
-        return client
-    return supabase
-
 st.set_page_config(
     page_title="PulseAI",
     page_icon="🧠",
@@ -30,18 +22,48 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+if "user" not in st.session_state:
+    st.session_state.user = None
+if "session" not in st.session_state:
+    st.session_state.session = None
+if "user_chats" not in st.session_state:
+    st.session_state.user_chats = {}
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = None
+if "active_options_id" not in st.session_state:
+    st.session_state.active_options_id = None
+if "rename_id" not in st.session_state:
+    st.session_state.rename_id = None
+
+if not st.session_state.user:
+    try:
+        current_session = supabase.auth.get_session()
+        if current_session and getattr(current_session, "user", None):
+            st.session_state.user = current_session.user
+            st.session_state.session = current_session
+    except Exception:
+        pass
+
 query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
     try:
         res = supabase.auth.exchange_code_for_session({"auth_code": auth_code})
-        if res and res.user:
+        if res and hasattr(res, "user") and res.user:
             st.session_state.user = res.user
             st.session_state.session = res.session
             st.query_params.clear()
             st.rerun()
-    except Exception as e:
+    except Exception:
         st.query_params.clear()
+
+def get_authenticated_supabase() -> Client:
+    session = st.session_state.get("session")
+    if session and hasattr(session, "access_token"):
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        client.postgrest.auth(session.access_token)
+        return client
+    return supabase
 
 st.markdown("""
     <style>
@@ -163,19 +185,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-if "user" not in st.session_state:
-    st.session_state.user = None
-if "session" not in st.session_state:
-    st.session_state.session = None
-if "user_chats" not in st.session_state:
-    st.session_state.user_chats = {}
-if "current_chat_id" not in st.session_state:
-    st.session_state.current_chat_id = None
-if "active_options_id" not in st.session_state:
-    st.session_state.active_options_id = None
-if "rename_id" not in st.session_state:
-    st.session_state.rename_id = None
-
 SYSTEM_PROMPT = (
     "أنت PulseAI، مساعد ذكاء اصطناعي شامل وفاخر مطوّر بواسطة PulseAI. "
     "تساعد المستخدم بذكاء ودقة باللغة العربية بأسلوب احترافي ومباشر."
@@ -193,8 +202,7 @@ def load_user_chats(user_id):
                 "messages": row.get("messages", [])
             }
         return chats
-    except Exception as e:
-        st.error(f"خطأ في جلب المحادثات: {e}")
+    except Exception:
         return {}
 
 def save_chat_to_db(chat_id, user_id, title, pinned, messages):
@@ -237,10 +245,8 @@ def show_login():
             auth_url = getattr(google_auth_res, "url", None) or (google_auth_res.get("url") if isinstance(google_auth_res, dict) else None)
             if auth_url:
                 st.link_button("🌐 الدخول باستخدام جوجل (Google)", auth_url, use_container_width=True)
-            else:
-                st.error("فشل الحصول على رابط تسجيل الدخول عبر Google")
         except Exception as e:
-            st.error(f"حدث خطأ في جلب رابط تسجيل الدخول: {e}")
+            st.error(f"خطأ في جلب رابط الدخول: {e}")
 
         st.write("---")
         email = st.text_input("البريد الإلكتروني")
@@ -259,22 +265,19 @@ def show_login():
                     st.session_state.user = res.user
                     st.session_state.session = res.session
                     st.session_state.user_chats = load_user_chats(res.user.id)
-                    st.success("تم تسجيل الدخول بنجاح!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"فشل تسجيل الدخول: {e}")
             else:
-                st.error("يرجى إدخال البريد الإلكتروني وكلمة المرور")
+                st.error("يرجى إدخال البيانات")
 
         if signup_btn:
             if email and password:
                 try:
                     res = supabase.auth.sign_up({"email": email, "password": password})
-                    st.success("تم إنشاء الحساب! يمكنك الآن تسجيل الدخول.")
+                    st.success("تم إنشاء الحساب! يمكنك تسجيل الدخول الآن.")
                 except Exception as e:
                     st.error(f"فشل إنشاء الحساب: {e}")
-            else:
-                st.error("يرجى إدخال البريد الإلكتروني وكلمة المرور")
 
 if not st.session_state.user:
     show_login()
@@ -306,7 +309,7 @@ def call_groq_api(messages_payload, model):
 
 def generate_chat_title(user_prompt, model):
     prompt_payload = [
-        {"role": "system", "content": "أنت مصمم عناوين. اكتب عنواناً جذاباً ومختصراً جداً (من 3 إلى 5 كلمات فقط) يلخص فكرة السؤال التالي بدون أقواس أو علامات تنقيط:"},
+        {"role": "system", "content": "اكتب عنواناً جذاباً ومختصراً جداً (من 3 إلى 5 كلمات) يلخص فكرة السؤال:"},
         {"role": "user", "content": user_prompt}
     ]
     title, _ = call_groq_api(prompt_payload, model)

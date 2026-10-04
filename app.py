@@ -35,11 +35,12 @@ if "code" in query_params:
     auth_code = query_params["code"]
     try:
         res = supabase.auth.exchange_code_for_session({"auth_code": auth_code})
-        st.session_state.user = res.user
-        st.session_state.session = res.session
-        st.query_params.clear()
-        st.rerun()
-    except Exception:
+        if res and res.user:
+            st.session_state.user = res.user
+            st.session_state.session = res.session
+            st.query_params.clear()
+            st.rerun()
+    except Exception as e:
         st.query_params.clear()
 
 st.markdown("""

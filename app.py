@@ -30,7 +30,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# التعامل مع الروابط العائدة من تسجيل الدخول
 query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
@@ -45,17 +44,28 @@ if "code" in query_params:
 
 st.markdown("""
     <style>
-    /* 1. إخفاء القائمة العلوية وأزرار Streamlit (Fork / GitHub / Toolbar) */
-    header {visibility: hidden !important;}
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
+    [data-testid="stAppDeployButton"] {display: none !important;}
+    [data-testid="stToolbar"] {display: none !important;}
     [data-testid="stDecoration"] {display: none !important;}
-    [data-testid="stHeader"] {display: none !important;}
-    
-    /* إخفاء الأزرار والأيقونات العائمة في الأسفل */
     .stAppToolbar {display: none !important;}
     iframe[title="streamlit_app"] {display: none !important;}
     
+    [data-testid="stSidebarNav"] {display: none !important;}
+    [data-testid="stHeader"] {
+        background-color: transparent !important;
+        z-index: 99999 !important;
+    }
+    [data-testid="stSidebarCollapsedControl"] {
+        display: block !important;
+        color: #ffffff !important;
+        background-color: #1e2333 !important;
+        border-radius: 8px !important;
+        padding: 4px !important;
+        margin: 8px !important;
+    }
+
     .stApp {
         background: radial-gradient(circle at 50% 30%, #1e2230 0%, #0e1117 100%);
         color: #e6e6e6;
@@ -90,9 +100,8 @@ st.markdown("""
         border: 1px solid #2e364f;
     }
 
-    /* 2. ضبط الشاشة للموبايل عند ظهور الكيبورد */
     .main .block-container {
-        padding-top: 2rem !important;
+        padding-top: 3rem !important;
         padding-bottom: 7rem !important;
         max-width: 100% !important;
     }

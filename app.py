@@ -40,14 +40,35 @@ if "active_options_id" not in st.session_state:
     st.session_state.active_options_id = None
 if "rename_id" not in st.session_state:
     st.session_state.rename_id = None
-if "cookies_initialized" not in st.session_state:
-    st.session_state.cookies_initialized = False
+
+def get_authenticated_supabase() -> Client:
+    session = st.session_state.get("session")
+    if session and hasattr(session, "access_token"):
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        client.postgrest.auth(session.access_token)
+        return client
+    return supabase
+
+def load_user_chats(user_id):
+    try:
+        db_client = get_authenticated_supabase()
+        res = db_client.table("user_chats").select("*").eq("user_id", str(user_id)).execute()
+        chats = {}
+        for row in res.data:
+            chats[row["id"]] = {
+                "title": row["title"],
+                "pinned": row.get("pinned", False),
+                "messages": row.get("messages", [])
+            }
+        return chats
+    except Exception:
+        return {}
 
 cookies = cookie_manager.get_all()
 
-if not st.session_state.user:
-    access_token = cookies.get('sb_access_token') if isinstance(cookies, dict) else None
-    refresh_token = cookies.get('sb_refresh_token') if isinstance(cookies, dict) else None
+if not st.session_state.user and isinstance(cookies, dict):
+    access_token = cookies.get('sb_access_token')
+    refresh_token = cookies.get('sb_refresh_token')
 
     if access_token and refresh_token:
         try:
@@ -59,10 +80,6 @@ if not st.session_state.user:
                 st.rerun()
         except Exception:
             pass
-    elif not st.session_state.cookies_initialized:
-        st.session_state.cookies_initialized = True
-        time.sleep(0.2)
-        st.rerun()
 
 query_params = st.query_params
 if "code" in query_params:
@@ -74,21 +91,14 @@ if "code" in query_params:
             st.session_state.session = res.session
             
             if res.session and hasattr(res.session, "access_token"):
-                cookie_manager.set('sb_access_token', res.session.access_token, key='set_acc_oauth')
-                cookie_manager.set('sb_refresh_token', res.session.refresh_token, key='set_ref_oauth')
+                cookie_manager.set('sb_access_token', res.session.access_token, key='set_acc_oauth', max_age=30*24*60*60)
+                cookie_manager.set('sb_refresh_token', res.session.refresh_token, key='set_ref_oauth', max_age=30*24*60*60)
             
+            st.session_state.user_chats = load_user_chats(res.user.id)
             st.query_params.clear()
             st.rerun()
     except Exception:
         st.query_params.clear()
-
-def get_authenticated_supabase() -> Client:
-    session = st.session_state.get("session")
-    if session and hasattr(session, "access_token"):
-        client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        client.postgrest.auth(session.access_token)
-        return client
-    return supabase
 
 st.markdown("""
     <style>
@@ -215,21 +225,6 @@ SYSTEM_PROMPT = (
     "تساعد المستخدم بذكاء ودقة باللغة العربية بأسلوب احترافي ومباشر."
 )
 
-def load_user_chats(user_id):
-    try:
-        db_client = get_authenticated_supabase()
-        res = db_client.table("user_chats").select("*").eq("user_id", str(user_id)).execute()
-        chats = {}
-        for row in res.data:
-            chats[row["id"]] = {
-                "title": row["title"],
-                "pinned": row.get("pinned", False),
-                "messages": row.get("messages", [])
-            }
-        return chats
-    except Exception:
-        return {}
-
 def save_chat_to_db(chat_id, user_id, title, pinned, messages):
     try:
         db_client = get_authenticated_supabase()
@@ -291,8 +286,8 @@ def show_login():
                     st.session_state.session = res.session
                     
                     if res.session and hasattr(res.session, "access_token"):
-                        cookie_manager.set('sb_access_token', res.session.access_token, key='set_acc_pass')
-                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, key='set_ref_pass')
+                        cookie_manager.set('sb_access_token', res.session.access_token, key='set_acc_pass', max_age=30*24*60*60)
+                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, key='set_ref_pass', max_age=30*24*60*60)
                     
                     st.session_state.user_chats = load_user_chats(res.user.id)
                     st.rerun()

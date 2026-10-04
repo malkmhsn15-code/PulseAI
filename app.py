@@ -23,11 +23,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-@st.cache_resource
-def get_cookie_manager():
-    return stx.CookieManager()
+# --- التعديل هنا: إدارة الـ Cookie Manager بدون cache_resource ---
+if "cookie_manager" not in st.session_state:
+    st.session_state.cookie_manager = stx.CookieManager(key="main_cookie_manager")
 
-cookie_manager = get_cookie_manager()
+cookie_manager = st.session_state.cookie_manager
 
 if "user" not in st.session_state:
     st.session_state.user = None

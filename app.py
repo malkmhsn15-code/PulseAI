@@ -77,7 +77,6 @@ if not st.session_state.user and isinstance(cookies, dict):
                 st.session_state.user = res.user
                 st.session_state.session = res.session
                 st.session_state.user_chats = load_user_chats(res.user.id)
-                st.rerun()
         except Exception:
             pass
 

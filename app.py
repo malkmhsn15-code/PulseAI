@@ -379,7 +379,7 @@ with st.sidebar:
     st.divider()
     selected_model = st.selectbox(
         "النموذج:",
-        ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.8-27b"]
+        ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
     )
 
 current_chat = st.session_state.user_chats.get(st.session_state.current_chat_id, None)
@@ -419,23 +419,10 @@ if prompt := st.chat_input("اسأل PulseAI..."):
     st.rerun()
 
 if current_chat and current_chat["messages"] and current_chat["messages"][-1]["role"] == "user":
-    with st.chat_message("assistant"):
-        with st.spinner("جاري التفكير..."):
-            payload = [{"role": "system", "content": SYSTEM_PROMPT}]
-            payload.extend([{"role": m["role"], "content": m["content"]} for m in current_chat["messages"]])
-            
-            answer, err = call_groq_api(payload, selected_model)
-            if answer:
-                st.markdown(answer)
-                current_chat["messages"].append({"role": "assistant", "content": answer})
-                
-                save_chat_to_db(
-                    st.session_state.current_chat_id,
-                    st.session_state.user.id,
-                    current_chat["title"],
-                    current_chat["pinned"],
-                    current_chat["messages"]
-                )
-                st.rerun()
-            else:
-                st.error(f"تنبيه: {err}")
+    withنعم، بالضبط. هذا الكود يمثل الملف الرئيسي كاملاً والتنفيذ الكامل للتطبيق بعد التعديلات الأخيرة.
+
+يمكنك استبدال كود ملفك الحالي (عادة ما يكون `app.py` أو `main.py`) بهذا الكود بالكامل، وسيغطي جميع الوظائف التالية بشكل مترابط:
+
+* **ربط Supabase وقواعد البيانات:** جلب وحفظ وتحديث وحذف المحادثات الخاصة بالمستخدم مع حماية الحسابات.
+* **إدارة الجلسة والمصادقة:** تسجيل الدخول عبر البريد أو Google عبر Supabase OAuth.
+* **واجهة التفاعل والدردشة:** إنشاء عنوان تلقائي للمحادثة، إمكانية التثبيت والتعديل والحذف، واختيار النماذج، وعرض رسائل Chat Input.

@@ -69,37 +69,33 @@ if "code" in query_params:
         if res and hasattr(res, "user") and res.user:
             st.session_state.user = res.user
             st.session_state.session = res.session
+            st.session_state.user_chats = load_user_chats(res.user.id)
             
             if res.session and hasattr(res.session, "access_token"):
-                cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60)
-                cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60)
+                cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60, key="set_acc")
+                cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_ref")
             
-            st.session_state.user_chats = load_user_chats(res.user.id)
             st.query_params.clear()
+            time.sleep(0.5)
             st.rerun()
     except Exception:
         st.query_params.clear()
 
 if not st.session_state.user:
-    cookies = cookie_manager.get_all()
-    
-    if cookies is None:
-        time.sleep(1)
-        st.rerun()
-    elif isinstance(cookies, dict):
-        access_token = cookies.get('sb_access_token')
-        refresh_token = cookies.get('sb_refresh_token')
+    access_token = cookie_manager.get('sb_access_token')
+    refresh_token = cookie_manager.get('sb_refresh_token')
 
-        if access_token and refresh_token:
-            try:
-                res = supabase.auth.set_session(access_token, refresh_token)
-                if res and hasattr(res, "user") and res.user:
-                    st.session_state.user = res.user
-                    st.session_state.session = res.session
-                    st.session_state.user_chats = load_user_chats(res.user.id)
-                    st.rerun()
-            except Exception:
-                pass
+    if access_token and refresh_token:
+        try:
+            res = supabase.auth.set_session(access_token, refresh_token)
+            if res and hasattr(res, "user") and res.user:
+                st.session_state.user = res.user
+                st.session_state.session = res.session
+                st.session_state.user_chats = load_user_chats(res.user.id)
+                st.rerun()
+        except Exception:
+            cookie_manager.delete('sb_access_token')
+            cookie_manager.delete('sb_refresh_token')
 
 st.markdown("""
     <style>
@@ -287,8 +283,8 @@ def show_login():
                     st.session_state.session = res.session
                     
                     if res.session and hasattr(res.session, "access_token"):
-                        cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60)
-                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60)
+                        cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60, key="set_acc_login")
+                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_ref_login")
                     
                     st.session_state.user_chats = load_user_chats(res.user.id)
                     time.sleep(0.5)

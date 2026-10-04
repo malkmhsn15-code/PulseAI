@@ -30,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# التعامل مع الروابط العائدة من تسجيل الدخول
+# معالجة رمز المصادقة عند العودة من Google
 query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
@@ -172,7 +172,7 @@ def save_chat_to_db(chat_id, user_id, title, pinned, messages):
             "title": title,
             "pinned": pinned,
             "messages": messages
-        }).execute()
+        }, on_conflict="id").execute()
     except Exception as e:
         st.error(f"خطأ أثناء حفظ المحادثة: {e}")
 
@@ -245,6 +245,10 @@ def show_login():
 if not st.session_state.user:
     show_login()
     st.stop()
+
+# تحميل المحادثات التلقائي عند وجود جلسة سابقة
+if st.session_state.user and not st.session_state.user_chats:
+    st.session_state.user_chats = load_user_chats(st.session_state.user.id)
 
 def call_groq_api(messages_payload, model):
     url = "https://api.groq.com/openai/v1/chat/completions"

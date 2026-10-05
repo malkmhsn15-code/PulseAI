@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import time
 from supabase import create_client, Client
-from streamlit_cookies_controller import CookieController
+import extra_streamlit_components as stx
 
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
@@ -17,13 +17,13 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-controller = CookieController()
-
 @st.cache_resource
 def init_supabase() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 supabase = init_supabase()
+
+cookie_manager = stx.CookieManager(key="cookie_manager_stable")
 
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -72,8 +72,8 @@ if "code" in query_params:
             st.session_state.user_chats = load_user_chats(res.user.id)
             
             if res.session and hasattr(res.session, "access_token"):
-                controller.set('sb_access_token', res.session.access_token, max_age=30*24*60*60)
-                controller.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60)
+                cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60, key="set_oauth_acc")
+                cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_oauth_ref")
             
             st.query_params.clear()
             time.sleep(1)
@@ -82,12 +82,7 @@ if "code" in query_params:
         st.query_params.clear()
 
 if not st.session_state.user:
-    all_cookies = controller.get_all()
-    
-    if all_cookies is None:
-        time.sleep(0.3)
-        all_cookies = controller.get_all()
-
+    all_cookies = cookie_manager.get_all()
     if all_cookies:
         acc_token = all_cookies.get('sb_access_token')
         ref_token = all_cookies.get('sb_refresh_token')
@@ -278,8 +273,8 @@ def show_login():
                     st.session_state.session = res.session
                     
                     if res.session and hasattr(res.session, "access_token"):
-                        controller.set('sb_access_token', res.session.access_token, max_age=30*24*60*60)
-                        controller.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60)
+                        cookie_manager.set('sb_access_token', res.session.access_token, max_age=30*24*60*60, key="set_pass_acc")
+                        cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_pass_ref")
                     
                     st.session_state.user_chats = load_user_chats(res.user.id)
                     time.sleep(1)
@@ -294,13 +289,203 @@ def show_login():
                 try:
                     res = supabase.auth.sign_up({"email": email, "password": password})
                     st.success("تم إنشاء الحساب! يمكنك تسجيل الدخول الآن.")
-                المشكلة بسيطة جداً: نص عربي ("أكيد، تم إزالة كافة الشروحات...") ينزل بالخطأ داخل كود البايثون في السطر 319 عند النسخ واللصق، والبايثون يرفض الفاصلة العربية (`،`) داخل الكود.
+                except Exception as e:
+                    st.error(f"فشل إنشاء الحساب: {e}")
 
-### حل المشكلة:
+if not st.session_state.user:
+    show_login()
+    st.stop()
 
-1. افتح الملف `/mount/src/pulseai/app.py` وانزل إلى **السطر 319**.
-2. امسح النص العربي الموجود في نهاية السطر تماماً.
-3. تأكد أن السطر مكتوب بكود بايثون صحيح فقط، مثل:
+if st.session_state.user and not st.session_state.user_chats:
+    st.session_state.user_chats = load_user_chats(st.session_state.user.id)
 
-```python
-response = requests.post(url, json=payload, headers=headers)
+def call_groq_api(messages_payload, model):
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": model,
+        "messages": messages_payload,
+        "temperature": 0.7
+    }
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        res_data = response.json()
+        if response.status_code == 200:
+            return res_data["choices"][0]["message"]["content"], None
+        else:
+            return None, res_data.get("error", {}).get("message", "خطأ في الاتصال")
+    except Exception as e:
+        return None, str(e)
+
+def generate_chat_title(user_prompt, model):
+    prompt_payload = [
+        {"role": "system", "content": "اكتب عنواناً جذاباً ومختصراً جداً (من 3 إلى 5 كلمات) يلخص فكرة السؤال:"},
+        {"role": "user", "content": user_prompt}
+    ]
+    title, _ = call_groq_api(prompt_payload, model)
+    if title:
+        return title.strip().replace('"', '').replace("'", "")
+    return user_prompt[:25]
+
+def render_chat_item(cid, chat_data):
+    col1, col2 = st.columns([0.82, 0.18])
+    
+    with col1:
+        if st.button(chat_data["title"], key=f"select_{cid}", use_container_width=True):
+            st.session_state.current_chat_id = cid
+            st.session_state.active_options_id = None
+            st.rerun()
+            
+    with col2:
+        if st.button("...", key=f"dots_{cid}"):
+            if st.session_state.active_options_id == cid:
+                st.session_state.active_options_id = None
+            else:
+                st.session_state.active_options_id = cid
+            st.rerun()
+
+    if st.session_state.active_options_id == cid:
+        with st.container():
+            st.markdown('<div class="options-box">', unsafe_allow_html=True)
+            c_opt1, c_opt2, c_opt3 = st.columns([0.33, 0.33, 0.33])
+            
+            with c_opt1:
+                pin_label = "إلغاء التثبيت" if chat_data.get("pinned", False) else "تثبيت"
+                if st.button(pin_label, key=f"pin_{cid}", use_container_width=True):
+                    chat_data["pinned"] = not chat_data.get("pinned", False)
+                    save_chat_to_db(cid, st.session_state.user.id, chat_data["title"], chat_data["pinned"], chat_data["messages"])
+                    st.session_state.active_options_id = None
+                    st.rerun()
+                    
+            with c_opt2:
+                if st.button("تعديل", key=f"ren_{cid}", use_container_width=True):
+                    st.session_state.rename_id = cid if st.session_state.rename_id != cid else None
+                    st.rerun()
+                    
+            with c_opt3:
+                if st.button("حذف", key=f"del_{cid}", use_container_width=True):
+                    delete_chat_from_db(cid)
+                    del st.session_state.user_chats[cid]
+                    if st.session_state.current_chat_id == cid:
+                        st.session_state.current_chat_id = None
+                    st.session_state.active_options_id = None
+                    st.rerun()
+
+            if st.session_state.rename_id == cid:
+                new_title = st.text_input("العنوان الجديد:", value=chat_data["title"], key=f"inp_{cid}")
+                if st.button("حفظ العنوان", key=f"save_{cid}", use_container_width=True):
+                    st.session_state.user_chats[cid]["title"] = new_title
+                    save_chat_to_db(cid, st.session_state.user.id, new_title, chat_data["pinned"], chat_data["messages"])
+                    st.session_state.rename_id = None
+                    st.session_state.active_options_id = None
+                    st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+with st.sidebar:
+    st.title("🧠 PulseAI")
+    user_email = getattr(st.session_state.user, "email", "مستخدم مسجّل")
+    st.caption(f"👤 {user_email}")
+    
+    if st.button("تسجيل الخروج", use_container_width=True):
+        try:
+            supabase.auth.sign_out()
+        except Exception:
+            pass
+        
+        cookie_manager.delete('sb_access_token')
+        cookie_manager.delete('sb_refresh_token')
+        
+        st.session_state.user = None
+        st.session_state.session = None
+        st.session_state.user_chats = {}
+        st.session_state.current_chat_id = None
+        st.rerun()
+
+    st.divider()
+
+    if st.button("محادثة جديدة", use_container_width=True):
+        st.session_state.current_chat_id = None
+        st.session_state.active_options_id = None
+        st.session_state.rename_id = None
+        st.rerun()
+
+    pinned_chats = {cid: data for cid, data in st.session_state.user_chats.items() if data.get("pinned", False)}
+    recent_chats = {cid: data for cid, data in st.session_state.user_chats.items() if not data.get("pinned", False)}
+
+    if pinned_chats:
+        st.markdown("### **المثبتة**")
+        for cid, chat_data in list(pinned_chats.items()):
+            render_chat_item(cid, chat_data)
+
+    st.markdown("### **الأحدث**")
+    for cid, chat_data in list(recent_chats.items()):
+        render_chat_item(cid, chat_data)
+
+    st.divider()
+    selected_model = st.selectbox(
+        "النموذج:",
+        ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+    )
+
+current_chat = st.session_state.user_chats.get(st.session_state.current_chat_id, None)
+
+if not current_chat or not current_chat["messages"]:
+    st.markdown("""
+        <div class="welcome-container">
+            <div class="welcome-title">من أين نبدأ؟</div>
+        </div>
+    """, unsafe_allow_html=True)
+else:
+    for msg in current_chat["messages"]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+if prompt := st.chat_input("اسأل PulseAI..."):
+    if st.session_state.current_chat_id is None:
+        new_id = f"chat_{int(time.time())}"
+        smart_title = generate_chat_title(prompt, selected_model)
+        st.session_state.user_chats[new_id] = {
+            "title": smart_title,
+            "messages": [],
+            "pinned": False
+        }
+        st.session_state.current_chat_id = new_id
+
+    active_chat = st.session_state.user_chats[st.session_state.current_chat_id]
+    active_chat["messages"].append({"role": "user", "content": prompt})
+    
+    save_chat_to_db(
+        st.session_state.current_chat_id,
+        st.session_state.user.id,
+        active_chat["title"],
+        active_chat["pinned"],
+        active_chat["messages"]
+    )
+    st.rerun()
+
+if current_chat and current_chat["messages"] and current_chat["messages"][-1]["role"] == "user":
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        
+        api_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for m in current_chat["messages"]:
+            api_messages.append({"role": m["role"], "content": m["content"]})
+            
+        response_text, error = call_groq_api(api_messages, selected_model)
+        
+        if error:
+            st.error(f"حدث خطأ أثناء الاتصال: {error}")
+        else:
+            message_placeholder.markdown(response_text)
+            current_chat["messages"].append({"role": "assistant", "content": response_text})
+            save_chat_to_db(
+                st.session_state.current_chat_id,
+                st.session_state.user.id,
+                current_chat["title"],
+                current_chat["pinned"],
+                current_chat["messages"]
+            )
+            st.rerun()

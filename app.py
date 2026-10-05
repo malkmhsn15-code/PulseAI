@@ -294,30 +294,13 @@ def show_login():
                 try:
                     res = supabase.auth.sign_up({"email": email, "password": password})
                     st.success("تم إنشاء الحساب! يمكنك تسجيل الدخول الآن.")
-                except Exception as e:
-                    st.error(f"فشل إنشاء الحساب: {e}")
+                المشكلة بسيطة جداً: نص عربي ("أكيد، تم إزالة كافة الشروحات...") ينزل بالخطأ داخل كود البايثون في السطر 319 عند النسخ واللصق، والبايثون يرفض الفاصلة العربية (`،`) داخل الكود.
 
-if not st.session_state.user:
-    show_login()
-    st.stop()
+### حل المشكلة:
 
-if st.session_state.user and not st.session_state.user_chats:
-    st.session_state.user_chats = load_user_chats(st.session_state.user.id)
-
-def call_groq_api(messages_payload, model):
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": model,
-        "messages": messages_payload,
-        "temperature": 0.7
-    }
-    try:
-        response = requests.postThe error occurs because an Arabic phrase (`أكيد، تم إزالة كافة الشروحات...`) was accidentally pasted directly into line 76 of your Python file. 
-
-This resulted in an unclosed string literal and broken code syntax:
+1. افتح الملف `/mount/src/pulseai/app.py` وانزل إلى **السطر 319**.
+2. امسح النص العربي الموجود في نهاية السطر تماماً.
+3. تأكد أن السطر مكتوب بكود بايثون صحيح فقط، مثل:
 
 ```python
+response = requests.post(url, json=payload, headers=headers)

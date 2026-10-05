@@ -73,155 +73,251 @@ if "code" in query_params:
             
             if res.session and hasattr(res.session, "access_token"):
                 controller.set('sb_access_token', res.session.access_token, max_age=30*24*60*60)
-                controller.set('sbأكيد، تم إزالة كافة الشروحات (التعليقات/Comments) من داخل الكود. تفضل الكود النظيف:
+                controller.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60)
+            
+            st.query_params.clear()
+            time.sleep(1)
+            st.rerun()
+    except Exception:
+        st.query_params.clear()
 
-```html
-<!DOCTYPE html>
-<html lang="ar">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>حاسبة الفائدة المركبة</title>
-  <style>
-    :root {
-      --bg-color: #f4f7f6;
-      --card-bg: #ffffff;
-      --text-color: #2c3e50;
-      --accent-color: #3498db;
-      --border-color: #e0e0e0;
-    }
-
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-color);
-      margin: 0;
-      padding: 20px;
-      direction: rtl;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: 20px auto;
-      background-color: var(--card-bg);
-      padding: 25px;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-    }
-
-    h1 {
-      margin-top: 0;
-      font-size: 1.5rem;
-      text-align: center;
-    }
-
-    .form-group {
-      margin-bottom: 15px;
-    }
-
-    label {
-      display: block;
-      margin-bottom: 5px;
-      font-weight: 600;
-    }
-
-    input, select {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      box-sizing: border-box;
-      font-size: 1rem;
-    }
-
-    button {
-      width: 100%;
-      padding: 12px;
-      background-color: var(--accent-color);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 1rem;
-      font-weight: bold;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-
-    button:hover {
-      opacity: 0.9;
-    }
-
-    .results {
-      margin-top: 25px;
-      padding-top: 20px;
-      border-top: 2px solid var(--border-color);
-      display: none;
-    }
-
-    .result-item {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 10px;
-      font-size: 1.1rem;
-    }
-
-    .result-item.highlight {
-      font-weight: bold;
-      color: var(--accent-color);
-      font-size: 1.2rem;
-    }
-  </style>
-</head>
-<body>
-
-  <div class="container">
-    <h1>حاسبة الفائدة المركبة</h1>
+if not st.session_state.user:
+    all_cookies = controller.get_all()
     
-    <div class="form-group">
-      <label for="principal">المبلغ الأصلي:</label>
-      <input type="number" id="principal" value="10000" min="0">
-    </div>
+    if all_cookies is None:
+        time.sleep(0.3)
+        all_cookies = controller.get_all()
 
-    <div class="form-group">
-      <label for="rate">نسبة الفائدة السنوية (%):</label>
-      <input type="number" id="rate" value="5" step="0.1" min="0">
-    </div>
+    if all_cookies:
+        acc_token = all_cookies.get('sb_access_token')
+        ref_token = all_cookies.get('sb_refresh_token')
+        if acc_token and ref_token:
+            try:
+                res = supabase.auth.set_session(acc_token, ref_token)
+                if res and hasattr(res, "user") and res.user:
+                    st.session_state.user = res.user
+                    st.session_state.session = res.session
+                    st.session_state.user_chats = load_user_chats(res.user.id)
+                    st.rerun()
+            except Exception:
+                pass
 
-    <div class="form-group">
-      <label for="years">المدة (بالسنوات):</label>
-      <input type="number" id="years" value="10" min="1">
-    </div>
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden !important;}
+    footer {visibility: hidden !important;}
+    [data-testid="stAppDeployButton"] {display: none !important;}
+    
+    [data-testid="stSidebarCollapseButton"], 
+    [data-testid="stSidebarExpandButton"],
+    [data-testid="stSidebarHeader"] {
+        visibility: visible !important;
+        display: flex !important;
+        color: #ffffff !important;
+    }
+    
+    .stApp {
+        background: radial-gradient(circle at 50% 30%, #1e2230 0%, #0e1117 100%);
+        color: #e6e6e6;
+    }
+    
+    [data-testid="stSidebar"] {
+        background-color: #131722;
+        border-left: 1px solid #232736;
+    }
+    
+    div.stButton > button {
+        background-color: transparent;
+        color: #c5c7d0;
+        border: none;
+        text-align: right;
+        justify-content: flex-start;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 14px;
+        transition: 0.2s;
+    }
+    div.stButton > button:hover {
+        background-color: #232838;
+        color: #ffffff;
+    }
 
-    <div class="form-group">
-      <label for="frequency">تكرار التراكب:</label>
-      <select id="frequency">
-        <option value="1">سنوياً</option>
-        <option value="2">نصف سنوي</option>
-        <option value="4">ربع سنوي</option>
-        <option value="12" selected>شهرياً</option>
-        <option value="365">يومياً</option>
-      </select>
-    </div>
+    .options-box {
+        background-color: #1a1f2c;
+        border-radius: 6px;
+        padding: 6px;
+        margin-bottom: 8px;
+        border: 1px solid #2e364f;
+    }
 
-    <button onclick="calculateInterest()">احسب الناتج</button>
+    .main .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 7rem !important;
+        max-width: 100% !important;
+    }
 
-    <div class="results" id="results">
-      <div class="result-item">
-        <span>إجمالي الفائدة المكتسبة:</span>
-        <span id="total-interest">0</span>
-      </div>
-      <div class="result-item highlight">
-        <span>المبلغ النهائي الإجمالي:</span>
-        <span id="final-amount">0</span>
-      </div>
-    </div>
-  </div>
+    .welcome-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 25vh;
+        text-align: center;
+        margin-top: 20px;
+    }
+    .welcome-title {
+        font-size: 2.2rem;
+        font-weight: bold;
+        color: #e2e8f0;
+        margin-bottom: 1rem;
+    }
 
-  <script>
-    function calculateInterest() {
-      const P = parseFloat(document.getElementById('principal').value);
-      const r = parseFloat(document.getElementById('rate').value) / 100;
-      const t = parseFloat(document.getElementById('years').value);
-      const n = parseInt(document.getElementById('frequency').value);
+    .login-box {
+        max-width: 420px;
+        margin: 40px auto 10px auto;
+        padding: 20px;
+        background-color: #131722;
+        border-radius: 12px;
+        border: 1px solid #232736;
+        text-align: center;
+    }
 
-      if (isNaN(P) || is
+    [data-testid="stChatMessage"] {
+        direction: rtl;
+        text-align: right;
+        background-color: transparent;
+    }
+    [data-testid="stChatMessage"] p, [data-testid="stChatMessage"] div {
+        unicode-bidi: plaintext;
+        text-align: right;
+    }
+    
+    [data-testid="stChatInput"] {
+        max-width: 750px;
+        margin: 0 auto;
+        position: fixed;
+        bottom: 20px;
+        left: 0;
+        right: 0;
+        z-index: 999;
+    }
+    [data-testid="stChatInput"] input {
+        direction: rtl;
+        text-align: right;
+        background-color: #1e2333 !important;
+        border: 1px solid #323b54 !important;
+        border-radius: 25px !important;
+        color: #ffffff !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+SYSTEM_PROMPT = (
+    "أنت PulseAI، مساعد ذكاء اصطناعي شامل وفاخر مطوّر بواسطة PulseAI. "
+    "تساعد المستخدم بذكاء ودقة باللغة العربية بأسلوب احترافي ومباشر."
+)
+
+def save_chat_to_db(chat_id, user_id, title, pinned, messages):
+    try:
+        db_client = get_authenticated_supabase()
+        db_client.table("user_chats").upsert({
+            "id": chat_id,
+            "user_id": str(user_id),
+            "title": title,
+            "pinned": pinned,
+            "messages": messages
+        }, on_conflict="id").execute()
+    except Exception as e:
+        st.error(f"خطأ أثناء حفظ المحادثة: {e}")
+
+def delete_chat_from_db(chat_id):
+    try:
+        db_client = get_authenticated_supabase()
+        db_client.table("user_chats").delete().eq("id", chat_id).execute()
+    except Exception as e:
+        st.error(f"خطأ أثناء حذف المحادثة: {e}")
+
+def show_login():
+    st.markdown("""
+        <div class="login-box">
+            <h2 style="color: #ffffff;">🧠 PulseAI</h2>
+            <p style="color: #a0aec0; margin-bottom: 15px;">مرحباً بك! يرجى تسجيل الدخول للمتابعة</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        try:
+            google_auth_res = supabase.auth.sign_in_with_oauth({
+                "provider": "google",
+                "options": {
+                    "redirect_to": APP_URL
+                }
+            })
+            auth_url = getattr(google_auth_res, "url", None) or (google_auth_res.get("url") if isinstance(google_auth_res, dict) else None)
+            if auth_url:
+                st.link_button("🌐 الدخول باستخدام جوجل (Google)", auth_url, use_container_width=True)
+        except Exception as e:
+            st.error(f"خطأ في جلب رابط الدخول: {e}")
+
+        st.write("---")
+        email = st.text_input("البريد الإلكتروني")
+        password = st.text_input("كلمة المرور", type="password")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            login_btn = st.button("تسجيل الدخول", use_container_width=True)
+        with c2:
+            signup_btn = st.button("حساب جديد", use_container_width=True)
+            
+        if login_btn:
+            if email and password:
+                try:
+                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                    st.session_state.user = res.user
+                    st.session_state.session = res.session
+                    
+                    if res.session and hasattr(res.session, "access_token"):
+                        controller.set('sb_access_token', res.session.access_token, max_age=30*24*60*60)
+                        controller.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60)
+                    
+                    st.session_state.user_chats = load_user_chats(res.user.id)
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"فشل تسجيل الدخول: {e}")
+            else:
+                st.error("يرجى إدخال البيانات")
+
+        if signup_btn:
+            if email and password:
+                try:
+                    res = supabase.auth.sign_up({"email": email, "password": password})
+                    st.success("تم إنشاء الحساب! يمكنك تسجيل الدخول الآن.")
+                except Exception as e:
+                    st.error(f"فشل إنشاء الحساب: {e}")
+
+if not st.session_state.user:
+    show_login()
+    st.stop()
+
+if st.session_state.user and not st.session_state.user_chats:
+    st.session_state.user_chats = load_user_chats(st.session_state.user.id)
+
+def call_groq_api(messages_payload, model):
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": model,
+        "messages": messages_payload,
+        "temperature": 0.7
+    }
+    try:
+        response = requests.postThe error occurs because an Arabic phrase (`أكيد، تم إزالة كافة الشروحات...`) was accidentally pasted directly into line 76 of your Python file. 
+
+This resulted in an unclosed string literal and broken code syntax:
+
+```python

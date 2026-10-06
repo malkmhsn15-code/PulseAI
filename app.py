@@ -4,6 +4,7 @@ import time
 from supabase import create_client, Client
 import extra_streamlit_components as stx
 
+# --- الإعدادات الأولية والمفاتيح ---
 GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
@@ -22,22 +23,22 @@ def init_supabase() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 supabase = init_supabase()
-
 cookie_manager = stx.CookieManager(key="cookie_manager_stable")
 
-if "user" not in st.session_state:
-    st.session_state.user = None
-if "session" not in st.session_state:
-    st.session_state.session = None
-if "user_chats" not in st.session_state:
-    st.session_state.user_chats = {}
-if "current_chat_id" not in st.session_state:
-    st.session_state.current_chat_id = None
-if "active_options_id" not in st.session_state:
-    st.session_state.active_options_id = None
-if "rename_id" not in st.session_state:
-    st.session_state.rename_id = None
+# --- إدارة حالة الجلسة (Session State) ---
+defaults = {
+    "user": None,
+    "session": None,
+    "user_chats": {},
+    "current_chat_id": None,
+    "active_options_id": None,
+    "rename_id": None
+}
+for key, val in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
+# --- وظائف التعامل مع قواعد البيانات (Supabase) ---
 def get_authenticated_supabase() -> Client:
     session = st.session_state.get("session")
     if session and hasattr(session, "access_token"):
@@ -61,6 +62,27 @@ def load_user_chats(user_id):
     except Exception:
         return {}
 
+def save_chat_to_db(chat_id, user_id, title, pinned, messages):
+    try:
+        db_client = get_authenticated_supabase()
+        db_client.table("user_chats").upsert({
+            "id": chat_id,
+            "user_id": str(user_id),
+            "title": title,
+            "pinned": pinned,
+            "messages": messages
+        }, on_conflict="id").execute()
+    except Exception as e:
+        st.error(f"خطأ أثناء حفظ المحادثة: {e}")
+
+def delete_chat_from_db(chat_id):
+    try:
+        db_client = get_authenticated_supabase()
+        db_client.table("user_chats").delete().eq("id", chat_id).execute()
+    except Exception as e:
+        st.error(f"خطأ أثناء حذف المحادثة: {e}")
+
+# --- معالجة تسجيل الدخول و OAuth ---
 query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
@@ -76,7 +98,7 @@ if "code" in query_params:
                 cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_oauth_ref")
             
             st.query_params.clear()
-            time.sleep(1)
+            time.sleep(0.5)
             st.rerun()
     except Exception:
         st.query_params.clear()
@@ -97,6 +119,7 @@ if not st.session_state.user:
             except Exception:
                 pass
 
+# --- تنسيق الواجهة (CSS) ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden !important;}
@@ -212,26 +235,7 @@ SYSTEM_PROMPT = (
     "تساعد المستخدم بذكاء ودقة باللغة العربية بأسلوب احترافي ومباشر."
 )
 
-def save_chat_to_db(chat_id, user_id, title, pinned, messages):
-    try:
-        db_client = get_authenticated_supabase()
-        db_client.table("user_chats").upsert({
-            "id": chat_id,
-            "user_id": str(user_id),
-            "title": title,
-            "pinned": pinned,
-            "messages": messages
-        }, on_conflict="id").execute()
-    except Exception as e:
-        st.error(f"خطأ أثناء حفظ المحادثة: {e}")
-
-def delete_chat_from_db(chat_id):
-    try:
-        db_client = get_authenticated_supabase()
-        db_client.table("user_chats").delete().eq("id", chat_id).execute()
-    except Exception as e:
-        st.error(f"خطأ أثناء حذف المحادثة: {e}")
-
+# --- شاشة تسجيل الدخول ---
 def show_login():
     st.markdown("""
         <div class="login-box">
@@ -277,7 +281,7 @@ def show_login():
                         cookie_manager.set('sb_refresh_token', res.session.refresh_token, max_age=30*24*60*60, key="set_pass_ref")
                     
                     st.session_state.user_chats = load_user_chats(res.user.id)
-                    time.sleep(1)
+                    time.sleep(0.5)
                     st.rerun()
                 except Exception as e:
                     st.error(f"فشل تسجيل الدخول: {e}")
@@ -287,7 +291,7 @@ def show_login():
         if signup_btn:
             if email and password:
                 try:
-                    res = supabase.auth.sign_up({"email": email, "password": password})
+                    supabase.auth.sign_up({"email": email, "password": password})
                     st.success("تم إنشاء الحساب! يمكنك تسجيل الدخول الآن.")
                 except Exception as e:
                     st.error(f"فشل إنشاء الحساب: {e}")
@@ -299,6 +303,7 @@ if not st.session_state.user:
 if st.session_state.user and not st.session_state.user_chats:
     st.session_state.user_chats = load_user_chats(st.session_state.user.id)
 
+# --- الاتصال مع نموذج Groq ---
 def call_groq_api(messages_payload, model):
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -311,7 +316,7 @@ def call_groq_api(messages_payload, model):
         "temperature": 0.7
     }
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        response = requests.post(url, json=payload, headers=headers, timeout=20)
         res_data = response.json()
         if response.status_code == 200:
             return res_data["choices"][0]["message"]["content"], None
@@ -341,10 +346,7 @@ def render_chat_item(cid, chat_data):
             
     with col2:
         if st.button("...", key=f"dots_{cid}"):
-            if st.session_state.active_options_id == cid:
-                st.session_state.active_options_id = None
-            else:
-                st.session_state.active_options_id = cid
+            st.session_state.active_options_id = None if st.session_state.active_options_id == cid else cid
             st.rerun()
 
     if st.session_state.active_options_id == cid:
@@ -384,6 +386,7 @@ def render_chat_item(cid, chat_data):
                     st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
+# --- الشريط الجانبي (Sidebar) ---
 with st.sidebar:
     st.title("🧠 PulseAI")
     user_email = getattr(st.session_state.user, "email", "مستخدم مسجّل")
@@ -427,9 +430,10 @@ with st.sidebar:
     st.divider()
     selected_model = st.selectbox(
         "النموذج:",
-        ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+        ["llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"]
     )
 
+# --- منطقة المحادثة الرئيسية ---
 current_chat = st.session_state.user_chats.get(st.session_state.current_chat_id, None)
 
 if not current_chat or not current_chat["messages"]:
@@ -443,6 +447,7 @@ else:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
+# --- معالجة الإدخال والتوليد المباشر ---
 if prompt := st.chat_input("اسأل PulseAI..."):
     if st.session_state.current_chat_id is None:
         new_id = f"chat_{int(time.time())}"
@@ -457,21 +462,16 @@ if prompt := st.chat_input("اسأل PulseAI..."):
     active_chat = st.session_state.user_chats[st.session_state.current_chat_id]
     active_chat["messages"].append({"role": "user", "content": prompt})
     
-    save_chat_to_db(
-        st.session_state.current_chat_id,
-        st.session_state.user.id,
-        active_chat["title"],
-        active_chat["pinned"],
-        active_chat["messages"]
-    )
-    st.rerun()
+    # عرض سؤال المستخدم فوراً
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-if current_chat and current_chat["messages"] and current_chat["messages"][-1]["role"] == "user":
+    # جلب رد الذكاء الاصطناعي في نفس الدورة
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         
         api_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        for m in current_chat["messages"]:
+        for m in active_chat["messages"]:
             api_messages.append({"role": m["role"], "content": m["content"]})
             
         response_text, error = call_groq_api(api_messages, selected_model)
@@ -480,12 +480,14 @@ if current_chat and current_chat["messages"] and current_chat["messages"][-1]["r
             st.error(f"حدث خطأ أثناء الاتصال: {error}")
         else:
             message_placeholder.markdown(response_text)
-            current_chat["messages"].append({"role": "assistant", "content": response_text})
+            active_chat["messages"].append({"role": "assistant", "content": response_text})
+            
+            # حفظ المحادثة في قاعدة البيانات
             save_chat_to_db(
                 st.session_state.current_chat_id,
                 st.session_state.user.id,
-                current_chat["title"],
-                current_chat["pinned"],
-                current_chat["messages"]
+                active_chat["title"],
+                active_chat["pinned"],
+                active_chat["messages"]
             )
             st.rerun()
